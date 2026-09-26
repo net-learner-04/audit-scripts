@@ -4,13 +4,6 @@ import config
 
 _RESET = "\u001b[0m"
 _LEVEL_COLOR = {"error": "\u001b[1;31m", "warning": "\u001b[1;33m", "success": "\u001b[1;32m", "info": "\u001b[0;37m"}
-_RISK_COLOR = {"high": "\u001b[1;31m", "medium": "\u001b[1;33m", "low": "\u001b[1;32m", None: "\u001b[0;37m"}
-
-
-def _colorize_line(line: str) -> str:
-    '''Wrap one report line in an ANSI color based on its highest matched risk keyword.'''
-    color = _RISK_COLOR.get(config.get_risk_level(line))
-    return f"{color}{line}{_RESET}"
 
 
 def send_alert(
@@ -19,17 +12,11 @@ def send_alert(
     title: str = "Notification",
     level: str = "info",
     fields: Optional[List[Dict]] = None,
-    colorize_lines: bool = False,
 ) -> bool:
     '''Send a plain (non-embed) Discord message, colored via an ansi code block, split into Discord-safe chunks.'''
     limit = getattr(config, "DISCORD_LIMIT", 1900)
-
-    if colorize_lines and message:
-        body = "\n".join(_colorize_line(line) for line in message.split("\n"))
-    elif message:
-        body = f"{_LEVEL_COLOR.get(level, _LEVEL_COLOR['info'])}{message}{_RESET}"
-    else:
-        body = ""
+    color = _LEVEL_COLOR.get(level, _LEVEL_COLOR["info"])
+    body = f"{color}{message}{_RESET}" if message else ""
 
     # Fields render as plain markdown lines above the code block (only on the first chunk).
     field_lines = "\n".join(f"**{f['name']}:** {f['value']}" for f in fields) if fields else ""
