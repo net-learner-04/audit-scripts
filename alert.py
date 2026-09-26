@@ -1,41 +1,102 @@
-import json, time, urllib.request, urllib.error
+import json
+import urllib.request
+import urllib.error
+from datetime import datetime, timezone
 from typing import Optional, List, Dict
-import config
 
 
-def send_alert(webhook_url: str, message: str = "",
-    title: str = "Notification", fields: Optional[List[Dict]] = None,
-              ) -> bool:
-    '''Send a plain (non-embed) Discord message with title, fields, and message all in one code block.'''
-    limit = getattr(config, "DISCORD_LIMIT", 1900)
+# Discord embed color for security alerts.
+ALERT_COLOR = 0xE74C3C
 
-    field_lines = [f"{f['name']}: {f['value']}" for f in fields] if fields else []
-    body = "\n".join(field_lines + ([message] if message else []))
 
-    chunks = [body[i:i + limit] for i in range(0, len(body), limit)] or [""]
-    total = len(chunks)
-    success = True
+def send_alert(
+    webhook_url: str,
+    message: str = "",
+    title: str = "Security Alert",
+    fields: Optional[List[Dict]] = None,
+) -> bool:
+    """Send a security alert to Discord using an embed."""
 
-    for idx, chunk in enumerate(chunks, start=1):
-        header = f"**{title}**" if total == 1 else f"**{title} ({idx}/{total})**"
-        content = f"{header}\n```\n{chunk}\n```"
+    if not webhook_url:
+        print("Discord webhook URL is not configured.")
+        return False
 
-        try:
-            data = json.dumps({"content": content}).encode("utf-8")
-            req = urllib.request.Request(
-                webhook_url,
-                data=data,
-                headers={"Content-Type": "application/json", "User-Agent": "Mozilla/5.0"}
+    embed = {
+        "title": title,
+        "color": ALERT_COLOR,
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "footer": {
+            "text": "Linux Security Monitor"
+        },
+    }
+
+    # Add the detected command as the embed description.
+    if message:
+        embed["description"] = (
+            "```text\n"
+            f"{message}\n"
+            "```"
+        )
+
+    # Add event information as embed fields.
+    if fields:
+        embed["fields"] = []
+
+        for field in fields:
+            name = str(field.get("name", "Unknown"))
+            value = str(field.get("value", "Unknown"))
+
+            embed["fields"].append(
+                {
+                    "name": name,
+                    "value": value,
+                    "inline": False,
+                }
             )
-            with urllib.request.urlopen(req) as response:
-                if response.status != 204:
-                    print(f"Discord transmission response status error: {response.status}")
-                    success = False
-        except urllib.error.HTTPError as e:
-            print(f"Failed to send Discord notification: {e.code}: {e.read().decode()}")
-            success = False
-        # Small delay between chunks to avoid hitting Discord's rate limit.
-        if total > 1:
-            time.sleep(1)
 
-    return success
+    payload = {
+        "embeds": [embed]
+    }
+
+    try:
+        data = json.dumps(payload).encode("utf-8")
+
+        request = urllib.request.Request(
+            webhook_url,
+            data=data,
+            headers={
+                "Content-Type": "application/json",
+                "User-Agent": "Linux-Security-Monitor/1.0",
+            },
+            method="POST",
+        )
+
+        with urllib.request.urlopen(request) as response:
+            if response.status == 204:
+                return True
+
+            print(
+                f"Discord transmission response status error: "
+                f"{response.status}"
+            )
+            return False
+
+    except urllib.error.HTTPError as e:
+        try:
+            error_body = e.read().decode("utf-8")
+        except Exception:
+            error_body = ""
+
+        print(
+            f"Failed to send Discord notification: "
+            f"{e.code}: {error_body}"
+        )
+        return False
+
+    except urllib.error.URLError as e:
+        print(f"Failed to connect to Discord: {e}")
+        return False
+
+    except Exception as e:
+        print(f"Unexpected Discord notification error: {e}")
+        return False
