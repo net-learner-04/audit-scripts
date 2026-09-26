@@ -1,84 +1,114 @@
-# Audit Log Watcher → Discord Alerts
+# Audit Log Watcher
 
-A lightweight Linux security monitoring tool that uses `auditd` to watch for
-sensitive file access and suspicious command execution, then reports findings
-to a Discord channel via webhook.
+A lightweight Linux security monitor that uses `auditd` to detect sensitive
+file access and malicious command execution, then sends alerts to Discord.
 
-## What it does
+## Features
 
-- **Sets up audit rules** (`audit.py`) to monitor:
-  - Writes/reads to `/etc/passwd`
-  - All process executions (`execve` syscalls)
-- **Tails the audit log** (`tailer.py`) in real time, handling log rotation
-  transparently (e.g. when `auditd` rotates `audit.log`).
-- **Parses raw audit log lines** (`parser.py`) into structured key/value data,
-  including decoding auditd's hex-encoded `EXECVE` arguments and handling the
-  "ENRICHED" log format.
-- **Filters for suspicious commands** using a keyword list (`config.py`) —
-  things like `wget`, `curl`, `chmod`, `base64`, `sudo`, `ssh-keygen`, shell
-  interpreters, etc. — matched with word boundaries to avoid false positives.
-- **Sends alerts to Discord** (`discord.py`) as rich embeds:
-  - Immediate alert when `/etc/passwd` is accessed.
-  - Periodic batched report (every 5 minutes) of suspicious commands executed,
-    queued and rate-limited before sending.
-- **Cleans up** all audit rules on exit (including `Ctrl+C`).
+* Monitors sensitive files such as `/etc/passwd`.
+* Monitors process execution through `execve`.
+* Parses and decodes auditd logs in real time.
+* Detects high-risk commands using keywords defined in `config.py`.
+* Sends security alerts to Discord using embeds.
+* Handles audit log rotation.
+* Removes its audit rules when stopped.
 
 ## Files
 
-| File | Purpose |
-|---|---|
-| `main.py` | Entry point; main event loop tying everything together |
-| `audit.py` | Sets up / tears down `auditctl` rules (requires root) |
-| `tailer.py` | Follows the audit log file, handles rotation |
-| `parser.py` | Parses and decodes raw audit log lines |
-| `config.py` | Tunables: polling interval, Discord limits, keyword list |
-| `discord.py` | Sends formatted messages/embeds to a Discord webhook |
+| File        | Purpose                                        |
+| ----------- | ---------------------------------------------- |
+| `main.py`   | Main monitoring loop                           |
+| `audit.py`  | Configures and removes audit rules             |
+| `tailer.py` | Follows the audit log and handles log rotation |
+| `parser.py` | Parses auditd log entries                      |
+| `config.py` | Monitoring settings and high-risk keywords     |
+| `alert.py`  | Sends Discord embed alerts                     |
 
 ## Requirements
 
-- Linux with `auditd` and `auditctl` installed, and **root privileges**
-  (needed to configure audit rules).
-- Python 3
-- `python-dotenv` (`pip install python-dotenv`)
+* Linux
+* `auditd` and `auditctl`
+* Python 3
+* Root privileges
+* `python-dotenv`
+
+Install the Python dependency:
+
+```bash
+pip install python-dotenv
+```
 
 ## Setup
 
-1. Create a `.env` file in the project root:
+Create a `.env` file in the project directory:
 
-   ```env
-   WEBHOOK=https://discord.com/api/webhooks/xxxxx/yyyyy
-   FILE_KEY=my_secret_key
-   EXEC_KEY=my_exec_key
-   AUDIT_LOG_PATH=/var/log/audit/audit.log
-   ```
+```env
+WEBHOOK=https://discord.com/api/webhooks/xxxxx/yyyyy
+FILE_KEY=my_secret_key
+EXEC_KEY=my_exec_key
+AUDIT_LOG_PATH=/var/log/audit/audit.log
+```
 
-   - `WEBHOOK` — your Discord webhook URL (required).
-   - `FILE_KEY` / `EXEC_KEY` — audit rule tags used internally to correlate
-     log entries (optional, sensible defaults provided).
-   - `AUDIT_LOG_PATH` — path to the audit log (defaults to the standard
-     location).
+* `WEBHOOK` — Discord webhook URL.
+* `FILE_KEY` — audit rule key for sensitive file access.
+* `EXEC_KEY` — audit rule key for process execution.
+* `AUDIT_LOG_PATH` — audit log path.
 
-2. Run as root (needed for `auditctl`):
+Run the monitor as root:
 
-   ```bash
-   sudo python3 main.py
-   ```
+```bash
+sudo python3 main.py
+```
 
-   It's recommended to run this inside `tmux` or as a `systemd` service so it
-   keeps running in the background.
+## Detection
 
-## How alerts work
+The monitor currently detects:
 
-- **File access alert**: sent immediately, with fields for the target file,
-  the program used, the UID, and the audit event ID.
-- **Suspicious exec report**: suspicious command lines are buffered and sent
-  as a single batched report every 5 minutes, respecting Discord's rate
-  limits and message-length caps (long reports are automatically split
-  across multiple embeds).
+### Sensitive file access
+
+Audit rules are used to monitor configured sensitive files.
+
+When access is detected, an alert is sent immediately.
+
+### High-risk commands
+
+Commands are checked against the keyword list in `config.py`.
+
+Current high-risk keywords:
+
+```text
+dd
+/etc/shadow
+/etc/sudoers
+authorized_keys
+```
+
+When a match is found, the Discord alert contains:
+
+* User
+* Command
+* Detection time
+
+## Discord Alerts
+
+Alerts are sent as Discord embeds.
+
+Example:
+
+```text
+Malicious Command Detected
+
+User
+root (uid=0)
+
+Command
+dd if=/dev/zero of=/tmp/testfile bs=1K count=1
+
+Audit
+```
 
 ## Notes
 
-- All audit rules are cleared on startup and on exit (`auditctl -D`), so this
-  tool takes exclusive ownership of audit rules while running.
-- This is intended as a simple host intrusion-detection / alerting tool for a
-  single server, not a full SIEM replacement.
+* The monitor requires root privileges to configure audit rules.
+* Audit rules are removed when the program exits.
+* This is a lightweight host monitoring tool, not a full SIEM.
