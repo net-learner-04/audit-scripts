@@ -1,4 +1,4 @@
-import os, time
+import os, pwd
 from datetime import datetime
 from dotenv import load_dotenv
 # Import modular components
@@ -19,41 +19,24 @@ FILE_KEY = os.getenv("FILE_KEY", "my_secret_key")
 EXEC_KEY = os.getenv("EXEC_KEY", "my_exec_key")
 AUDIT_LOG_PATH = os.getenv("AUDIT_LOG_PATH", "/var/log/audit/audit.log")
 
-MESSAGE_QUEUE = []
-LAST_SENT = 0
 
-
-def flush(force=False):
-    '''Send queued messages to Discord while respecting rate limiting.'''
-    global LAST_SENT
-
-    if not MESSAGE_QUEUE:
-        return
-
-    now = time.time()
-
-    if not force and now - LAST_SENT < config.INTERVAL:
-        return
-
-    msg = "\n".join(MESSAGE_QUEUE)
-    MESSAGE_QUEUE.clear()
-
-    send_alert(WEBHOOK, msg, title="Suspicious EXEC Report", level="warning", colorize_lines=True)
-    LAST_SENT = now
+def resolve_username(uid) -> str:
+    '''Resolve a UID to its username (requires root), falling back to the raw UID if unknown.'''
+    try:
+        return pwd.getpwuid(int(uid)).pw_name
+    except (ValueError, KeyError, TypeError):
+        return str(uid)
 
 
 def start():
-    '''Main loop that monitors audit logs, processes events, and sends alerts/reports.'''
+    '''Main loop: continuously monitors audit logs and sends an alert immediately on any high-risk event.'''
     buffer = dict()
-    reports = []
     setup_audit_rules(FILE_KEY, EXEC_KEY)
 
-    start_time = datetime.now()
+    print(f"Start time: {datetime.now().strftime('%Y-%m-%d %H:%M')}")
+    print(f"Monitoring the {AUDIT_LOG_PATH} file...")
 
     try:
-        print(f"Start time: {start_time.strftime('%Y-%m-%d %H:%M')}")
-        print(f"Monitoring the {AUDIT_LOG_PATH} file...")
-
         for line in file_tailing(AUDIT_LOG_PATH):
             parsed_data = parse_audit_log(line)
 
@@ -68,6 +51,7 @@ def start():
                 if parsed_data.get("key") == FILE_KEY:
                     exe_path = parsed_data.get("exe", "Unknown")
                     uid_val = parsed_data.get("uid", "Unknown")
+                    username = resolve_username(uid_val)
 
                     send_alert(
                         WEBHOOK,
@@ -76,7 +60,7 @@ def start():
                         fields=[
                             {"name": "Target", "value": "/etc/passwd"},
                             {"name": "Program", "value": exe_path},
-                            {"name": "UID", "value": str(uid_val)},
+                            {"name": "User", "value": f"{username} (uid={uid_val})"},
                             {"name": "Event ID", "value": str(msg_id)},
                         ],
                     )
@@ -100,25 +84,20 @@ def start():
 
                     cmd_line = " ".join(buffer[msg_id]["args"])
 
-                    # Only keep lines matching a known suspicious keyword, to stay short and relevant.
                     if is_suspicious(cmd_line):
                         exe = buffer[msg_id]["exe"]
                         uid = buffer[msg_id]["uid"]
-                        reports.append(f"[{exe} / uid={uid}] {cmd_line}")
+                        username = resolve_username(uid)
+
+                        # High-risk command: alert immediately, no batching.
+                        send_alert(
+                            WEBHOOK,
+                            f"[{exe} / user={username} (uid={uid})] {cmd_line}",
+                            title="High-Risk Command Detected",
+                            level="error",
+                        )
 
                     buffer.pop(msg_id)
-            current_time = datetime.now()
-            elapsed = (current_time - start_time).total_seconds()
-
-            # Command monitoring time (in seconds)
-            if elapsed >= 300:
-                if reports:
-                    report_msg = f"EXEC Report\n" + "\n".join(reports)
-                    MESSAGE_QUEUE.append(report_msg)
-                    flush()
-
-                reports = []
-                start_time = current_time
     except KeyboardInterrupt as e:
         print(f"The script is terminated by the user: {e}")
     finally:
