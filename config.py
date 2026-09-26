@@ -7,11 +7,7 @@ INTERVAL = 10
 DISCORD_LIMIT = 1900
 
 # All keywords are treated as high-risk; matched with word boundaries to avoid false positives like "sync"/"disk".
-KEYWORDS = [
-    "wget", "curl", "nc", "ncat", "netcat", "chmod", "base64",
-    "/etc/shadow", "/etc/sudoers", "rm", "dd",
-    "ssh-keygen", "authorized_keys",
-]
+KEYWORDS = ["dd", "/etc/shadow", "/etc/sudoers", "authorized_keys",]
 
 _KEYWORD_PATTERN = re.compile(
     r"\b(?:" + "|".join(re.escape(k) for k in KEYWORDS) + r")\b",
