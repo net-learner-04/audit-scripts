@@ -3,27 +3,22 @@ from typing import Optional, List, Dict
 import config
 
 
-def send_alert(
-    webhook_url: str,
-    message: str = "",
-    title: str = "Notification",
-    fields: Optional[List[Dict]] = None,
-) -> bool:
-    '''Send a plain Discord message: title, then fields, then message in a code block, split into Discord-safe chunks.'''
+def send_alert(webhook_url: str, message: str = "",
+    title: str = "Notification", fields: Optional[List[Dict]] = None,
+              ) -> bool:
+    '''Send a plain (non-embed) Discord message with title, fields, and message all in one code block.'''
     limit = getattr(config, "DISCORD_LIMIT", 1900)
-    field_lines = "\n".join(f"**{f['name']}:** {f['value']}" for f in fields) if fields else ""
 
-    chunks = [message[i:i + limit] for i in range(0, len(message), limit)] or [""]
+    field_lines = [f"{f['name']}: {f['value']}" for f in fields] if fields else []
+    body = "\n".join(field_lines + ([message] if message else []))
+
+    chunks = [body[i:i + limit] for i in range(0, len(body), limit)] or [""]
     total = len(chunks)
     success = True
 
     for idx, chunk in enumerate(chunks, start=1):
         header = f"**{title}**" if total == 1 else f"**{title} ({idx}/{total})**"
-        content = header
-        if field_lines and idx == 1:
-            content += f"\n{field_lines}"
-        if chunk:
-            content += f"\n```\n{chunk}\n```"
+        content = f"{header}\n```\n{chunk}\n```"
 
         try:
             data = json.dumps({"content": content}).encode("utf-8")
