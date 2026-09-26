@@ -2,8 +2,7 @@ import sys, os
 import subprocess as sub
 
 def setup_audit_rules(file_key: str, exec_key: str):
-    '''Set up audit rules to monitor sensitive file access and process execution using auditctl. 
-    Requires root privileges.'''
+    '''Set up auditctl rules to monitor sensitive file access and execve calls (requires root).'''
     # Delete All Existing Audit Rules.
     sub.run(["auditctl", "-D"], stdout=sub.DEVNULL, stderr=sub.DEVNULL)
 
