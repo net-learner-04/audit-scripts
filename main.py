@@ -6,7 +6,7 @@ import config
 from audit import setup_audit_rules, cleanup_audit_rules
 from tailer import file_tailing
 from parser import parse_audit_log, is_suspicious
-from discord import send_discord_server
+from alert import send_alert
 
 
 # Run in the background using tmux.
@@ -38,7 +38,7 @@ def flush(force=False):
     msg = "\n".join(MESSAGE_QUEUE)
     MESSAGE_QUEUE.clear()
 
-    send_discord_server(WEBHOOK, msg, title="Suspicious EXEC Report", level="warning")
+    send_alert(WEBHOOK, msg, title="Suspicious EXEC Report", level="warning", colorize_lines=True)
     LAST_SENT = now
 
 
@@ -59,7 +59,7 @@ def start():
 
             if "type" not in parsed_data:
                 continue
-            
+
             log_type = parsed_data.get("type")
             log_key = parsed_data.get("key")
             msg_id = parsed_data.get("msg_id")
@@ -69,15 +69,15 @@ def start():
                     exe_path = parsed_data.get("exe", "Unknown")
                     uid_val = parsed_data.get("uid", "Unknown")
 
-                    send_discord_server(
+                    send_alert(
                         WEBHOOK,
                         title="Sensitive File Access Detected",
                         level="error",
                         fields=[
-                            {"name": "Target", "value": "/etc/passwd", "inline": True},
-                            {"name": "Program", "value": exe_path, "inline": True},
-                            {"name": "UID", "value": str(uid_val), "inline": True},
-                            {"name": "Event ID", "value": str(msg_id), "inline": False},
+                            {"name": "Target", "value": "/etc/passwd"},
+                            {"name": "Program", "value": exe_path},
+                            {"name": "UID", "value": str(uid_val)},
+                            {"name": "Event ID", "value": str(msg_id)},
                         ],
                     )
 
@@ -100,8 +100,7 @@ def start():
 
                     cmd_line = " ".join(buffer[msg_id]["args"])
 
-                    # Only keep command lines that match a known suspicious keyword,
-                    # so reports stay short and relevant instead of hitting Discord's length limit.
+                    # Only keep lines matching a known suspicious keyword, to stay short and relevant.
                     if is_suspicious(cmd_line):
                         exe = buffer[msg_id]["exe"]
                         uid = buffer[msg_id]["uid"]
@@ -117,7 +116,7 @@ def start():
                     report_msg = f"EXEC Report\n" + "\n".join(reports)
                     MESSAGE_QUEUE.append(report_msg)
                     flush()
-                
+
                 reports = []
                 start_time = current_time
     except KeyboardInterrupt as e:
