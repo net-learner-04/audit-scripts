@@ -2,26 +2,18 @@ import json, time, urllib.request, urllib.error
 from typing import Optional, List, Dict
 import config
 
-_RESET = "\u001b[0m"
-_LEVEL_COLOR = {"error": "\u001b[1;31m", "warning": "\u001b[1;33m", "success": "\u001b[1;32m", "info": "\u001b[0;37m"}
-
 
 def send_alert(
     webhook_url: str,
     message: str = "",
     title: str = "Notification",
-    level: str = "info",
     fields: Optional[List[Dict]] = None,
 ) -> bool:
-    '''Send a plain (non-embed) Discord message, colored via an ansi code block, split into Discord-safe chunks.'''
+    '''Send a plain Discord message: title, then fields, then message in a code block, split into Discord-safe chunks.'''
     limit = getattr(config, "DISCORD_LIMIT", 1900)
-    color = _LEVEL_COLOR.get(level, _LEVEL_COLOR["info"])
-    body = f"{color}{message}{_RESET}" if message else ""
-
-    # Fields render as plain markdown lines above the code block (only on the first chunk).
     field_lines = "\n".join(f"**{f['name']}:** {f['value']}" for f in fields) if fields else ""
 
-    chunks = [body[i:i + limit] for i in range(0, len(body), limit)] or [""]
+    chunks = [message[i:i + limit] for i in range(0, len(message), limit)] or [""]
     total = len(chunks)
     success = True
 
@@ -31,7 +23,7 @@ def send_alert(
         if field_lines and idx == 1:
             content += f"\n{field_lines}"
         if chunk:
-            content += f"\n```ansi\n{chunk}\n```"
+            content += f"\n```\n{chunk}\n```"
 
         try:
             data = json.dumps({"content": content}).encode("utf-8")
