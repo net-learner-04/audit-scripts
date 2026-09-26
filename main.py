@@ -8,6 +8,7 @@ from tailer import file_tailing
 from parser import parse_audit_log, is_suspicious
 from alert import send_alert
 
+# Load environment variables
 load_dotenv()
 
 WEBHOOK = os.getenv("WEBHOOK")
@@ -64,14 +65,9 @@ def start():
                     buffer[msg_id] = {
                         "exe": parsed_data.get("exe", "Unknown"),
                         "uid": parsed_data.get("uid", "Unknown"),
-                        "cwd": "Unknown",
                         # A list to store the commands used when the type is EXECVE.
                         "args": []
                     }
-            elif log_type == "CWD":
-                # CWD record carries the process's working directory; comes between SYSCALL and EXECVE.
-                if msg_id in buffer:
-                    buffer[msg_id]["cwd"] = parsed_data.get("cwd", "Unknown")
             elif log_type == "EXECVE":
                 if msg_id in buffer:
                     for key in sorted(parsed_data.keys()):
@@ -87,17 +83,14 @@ def start():
                     if is_suspicious(cmd_line):
                         exe = buffer[msg_id]["exe"]
                         uid = buffer[msg_id]["uid"]
-                        cwd = buffer[msg_id]["cwd"]
                         username = resolve_username(uid)
 
-                        # High-risk command: alert immediately, no batching.
                         send_alert(
                             WEBHOOK,
                             cmd_line,
                             title="Malicious Command Detected",
                             fields=[
                                 {"name": "Command", "value": exe},
-                                {"name": "Path", "value": cwd},
                                 {"name": "User", "value": f"{username} (uid={uid})"},
                             ],
                         )
