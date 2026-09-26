@@ -26,17 +26,9 @@ def send_alert(
         "color": ALERT_COLOR,
         "timestamp": datetime.now(timezone.utc).isoformat(),
         "footer": {
-            "text": "Linux Security Monitor"
+            "text": "Audit"
         },
     }
-
-    # Add the detected command as the embed description.
-    if message:
-        embed["description"] = (
-            "```text\n"
-            f"{message}\n"
-            "```"
-        )
 
     # Add event information as embed fields.
     if fields:
@@ -54,6 +46,16 @@ def send_alert(
                 }
             )
 
+    # Add the detected command after the fields.
+    if message:
+        embed["fields"].append(
+            {
+                "name": "Command",
+                "value": f"```text\n{message}\n```",
+                "inline": False,
+            }
+        )
+
     payload = {
         "embeds": [embed]
     }
@@ -66,7 +68,7 @@ def send_alert(
             data=data,
             headers={
                 "Content-Type": "application/json",
-                "User-Agent": "Linux-Security-Monitor/1.0",
+                "User-Agent": "Audit/1.0",
             },
             method="POST",
         )
