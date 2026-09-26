@@ -90,7 +90,6 @@ def start():
                             cmd_line,
                             title="Malicious Command Detected",
                             fields=[
-                                {"name": "Command", "value": exe},
                                 {"name": "User", "value": f"{username} (uid={uid})"},
                             ],
                         )
