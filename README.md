@@ -70,7 +70,7 @@ Audit rules are used to monitor configured sensitive files.
 
 When access is detected, an alert is sent immediately.
 
-### High-risk commands
+### Malicious commands
 
 Commands are checked against the keyword list in `config.py`.
 
