@@ -74,7 +74,7 @@ When access is detected, an alert is sent immediately.
 
 Commands are checked against the keyword list in `config.py`.
 
-Current high-risk keywords:
+Current malicious keywords:
 
 ```text
 dd
